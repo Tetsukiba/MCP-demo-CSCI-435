@@ -17,12 +17,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import threading
+
 from dashboard import run_dashboard
+import time
 
 # Import our Sonar tools
 from sonar import scan, status, apply_patch, quality_gate
 from mcp_helpers import log, TOOL_STATS, CORRELATION_CHAIN
-from sse_tracker import get_sse_stats
+from sse_tracker import get_sse_stats, SSE_EVENTS, monitor_sonar_ce_task_sse
 
 # NOTE: Figma and GitHub tools come from MCP servers you're already connected to!
 # In a real MCP environment, you'd call them via the MCP protocol.
@@ -49,6 +51,17 @@ def parse_figma_url(url: str) -> tuple[str, str]:
 
 
 class Workflow:
+    async def _fetch_figma_design(self) -> dict:
+        """Fetch design from Figma MCP server (simulated for demo)."""
+        log("Calling Figma MCP: get_design_context(fileKey={}, nodeId={})", self.figma_file_key, self.figma_node_id)
+        await asyncio.sleep(0.5)  # Simulate API call
+        return {
+            "code": """import React from 'react';\n\nexport const LoginForm = () => {\n  const [email, setEmail] = React.useState('');\n  const [password, setPassword] = React.useState('');\n  \n  const handleSubmit = (e) => {\n    e.preventDefault();\n    console.log('Login attempt:', email);  // Security issue!\n  };\n  \n  return (\n    <form onSubmit={handleSubmit}>\n      <input \n        type=\"email\" \n        value={email} \n        onChange={(e) => setEmail(e.target.value)} \n      />\n      <input \n        type=\"password\" \n        value={password} \n        onChange={(e) => setPassword(e.target.value)} \n      />\n      <button type=\"submit\">Login</button>\n    </form>\n  );\n};\n""",
+            "metadata": {
+                "name": "LoginForm",
+                "type": "COMPONENT"
+            }
+        }
     """End-to-end Figma-to-PR workflow orchestrator."""
     
     def __init__(self, figma_file_key: str, figma_node_id: str, repo: str, project_key: str):
@@ -56,6 +69,7 @@ class Workflow:
         self.figma_node_id = figma_node_id
         self.repo = repo  # "owner/repo"
         self.project_key = project_key
+
         self.correlation_id = None
     
     async def run(self) -> dict:
@@ -64,70 +78,97 @@ class Workflow:
             "steps": [],
             "overall_status": "started"
         }
-        
+        # Simulate SSE event for Figma fetch
+        SSE_EVENTS.append({"correlation_id": "figma-fetch", "event": "FETCH", "timestamp": time.time()})
         try:
             # Step 1: Fetch design from Figma (via Figma MCP server)
             log("\n" + "="*60)
             log("STEP 1: Fetching Figma design")
             log("="*60)
-            
-            # In production: Call mcp_figma_mcp-ser_get_design_context
-            # For now, simulate the response structure
+
             design_result = await self._fetch_figma_design()
             results["steps"].append({
                 "step": "figma_fetch",
                 "status": "success",
                 "file_key": self.figma_file_key,
                 "node_id": self.figma_node_id
+                # Simulate SSE event for code extraction
             })
-            
+            SSE_EVENTS.append({"correlation_id": "code-extract", "event": "EXTRACT", "timestamp": time.time()})
+
             # Step 2: Extract code files
             log("\n" + "="*60)
             log("STEP 2: Extracting code from design")
             log("="*60)
-            
+
             files = self._extract_code_files(design_result)
             results["steps"].append({
                 "step": "code_extraction",
                 "status": "success",
                 "file_count": len(files)
             })
-            
+
             # Step 3: Run SonarQube scan
             log("\n" + "="*60)
             log("STEP 3: Running SonarQube analysis")
             log("="*60)
-            
-            scan_result = await scan(project_key=self.project_key, files=files)
+
+            scan_result = await scan(
+                project_key=self.project_key,
+                files=files,
+                _jsonrpc_id="rpc-sonar-scan",
+                _parent_cid="figma-code"
+            )
             task_id = scan_result.get("taskId")
             log("Scan started: taskId={}, mode={}", task_id, scan_result.get("mode"))
-            
+            # Simulate SSE event for Sonar scan start
+            SSE_EVENTS.append({"correlation_id": "sonar-scan", "event": "STARTED", "timestamp": time.time()})
+
             results["steps"].append({
                 "step": "sonar_scan",
                 "status": "success",
                 "task_id": task_id,
                 "mode": scan_result.get("mode")
             })
-            
+
             # Step 4: Poll for completion
+            # Simulate SSE event for Sonar analysis complete
+            SSE_EVENTS.append({"correlation_id": "sonar-scan", "event": "FINISHED", "timestamp": time.time()})
             log("\n" + "="*60)
             log("STEP 4: Waiting for analysis to complete")
             log("="*60)
-            
-            issues = await self._wait_for_analysis(task_id)
+
+            issues = await self._wait_for_analysis(
+                task_id,
+                _jsonrpc_id="rpc-sonar-status",
+                _parent_cid="sonar-scan"
+            )
             results["steps"].append({
                 "step": "analysis_complete",
                 "status": "success",
                 "issue_count": len(issues)
             })
-            
+
             # Step 5: Apply patches automatically
             if issues:
                 log("\n" + "="*60)
                 log("STEP 5: Applying automated patches ({} issues)", len(issues))
+                # Simulate SSE event for patch application
+                SSE_EVENTS.append({"correlation_id": "sonar-patch", "event": "PATCH_APPLIED", "timestamp": time.time()})
+                # Real SSE tracking for patch application (if supported)
+                try:
+                    await monitor_sonar_ce_task_sse(task_id, os.getenv("SONARQUBE_URL", "http://localhost:9000"), (os.getenv("SONARQUBE_USER", "admin"), os.getenv("SONARQUBE_PASS", "admin")), "sonar-patch")
+                except Exception as sse_exc:
+                    log("SSE tracking error: {}", sse_exc)
                 log("="*60)
-                
-                patches_applied = await self._apply_patches(task_id, issues, files)
+
+                patches_applied = await self._apply_patches(
+                    task_id,
+                    issues,
+                    files,
+                    _jsonrpc_id="rpc-sonar-applypatch",
+                    _parent_cid="sonar-status"
+                )
                 results["steps"].append({
                     "step": "patch_application",
                     "status": "success",
@@ -140,90 +181,49 @@ class Workflow:
                     "status": "skipped",
                     "reason": "no_issues"
                 })
-            
+
             # Step 6: Verify quality gate
             log("\n" + "="*60)
             log("STEP 6: Checking quality gate")
             log("="*60)
-            
-            gate_result = await quality_gate(project_key=self.project_key)
+
+            gate_result = await quality_gate(
+                project_key=self.project_key,
+                _jsonrpc_id="rpc-sonar-qualitygate",
+                _parent_cid="sonar-applypatch"
+            )
             gate_status = gate_result.get("qualityGate", {}).get("projectStatus", {}).get("status", "UNKNOWN")
-            
+
             results["steps"].append({
                 "step": "quality_gate",
                 "status": "success",
                 "gate_status": gate_status
             })
-            
+
             # Step 7: Create PR (via GitHub MCP server)
             log("\n" + "="*60)
             log("STEP 7: Creating Pull Request")
             log("="*60)
-            
+
             pr_result = await self._create_pr(files, issues)
             results["steps"].append({
                 "step": "pr_creation",
                 "status": pr_result.get("status", "pending"),
                 "pr_url": pr_result.get("pr_url")
             })
-            
+
             results["overall_status"] = "completed"
             log("\n" + "="*60)
             log("✓ WORKFLOW COMPLETED SUCCESSFULLY")
             log("="*60)
-            
+
         except Exception as e:
             log("✗ WORKFLOW FAILED: {}", repr(e))
             results["overall_status"] = "failed"
             results["error"] = str(e)
-        
-        return results
-    
-    async def _fetch_figma_design(self) -> dict:
-        """Fetch design from Figma MCP server."""
-        # In production, this would call:
-        # mcp_figma_mcp-ser_get_design_context(fileKey=..., nodeId=...)
-        
-        # Simulated response for demo
-        log("Calling Figma MCP: get_design_context(fileKey={}, nodeId={})", 
-            self.figma_file_key, self.figma_node_id)
-        
-        await asyncio.sleep(0.5)  # Simulate API call
-        
-        return {
-            "code": """import React from 'react';
 
-export const LoginForm = () => {
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
-  
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log('Login attempt:', email);  // Security issue!
-  };
-  
-  return (
-    <form onSubmit={handleSubmit}>
-      <input 
-        type="email" 
-        value={email} 
-        onChange={(e) => setEmail(e.target.value)} 
-      />
-      <input 
-        type="password" 
-        value={password} 
-        onChange={(e) => setPassword(e.target.value)} 
-      />
-      <button type="submit">Login</button>
-    </form>
-  );
-};
-""",
-            "metadata": {
-                "name": "LoginForm",
-                "type": "COMPONENT"
-            }
-        }
+        return results
+
     
     def _extract_code_files(self, design_result: dict) -> dict[str, str]:
         """Extract files from Figma design data."""
@@ -250,7 +250,7 @@ describe('{component_name}', () => {{
 }});
 """
     
-    async def _wait_for_analysis(self, task_id: str, max_attempts: int = 10) -> list[dict]:
+    async def _wait_for_analysis(self, task_id: str, max_attempts: int = 10, **kwargs) -> list[dict]:
         """Poll task until complete and return issues."""
         for attempt in range(max_attempts):
             await asyncio.sleep(1.0)
@@ -390,8 +390,6 @@ describe('{component_name}', () => {{
             "pr_url": pr_json.get("html_url"),
             "pr_number": pr_json.get("number")
         }
-
-
 async def main():
     """Run the demo workflow."""
     # Parse command line arguments
@@ -430,6 +428,42 @@ async def main():
     
     results = await workflow.run()
     
+    # Inject simulated Figma and GitHub tool stats for dashboard visibility
+    TOOL_STATS["figma.get_design_context"] = {"count": 1, "total_ms": 120.0}
+    TOOL_STATS["figma.extract_code"] = {"count": 1, "total_ms": 80.0}
+    TOOL_STATS["github.create_branch"] = {"count": 1, "total_ms": 150.0}
+    TOOL_STATS["github.create_pull_request"] = {"count": 1, "total_ms": 200.0}
+
+    # Simulate JSON-RPC and parent correlation IDs
+    CORRELATION_CHAIN["figma-ctx"] = {
+        "tool": "figma.get_design_context",
+        "status": "success",
+        "elapsed_ms": 120.0,
+        "jsonrpc_id": "rpc-figma-001",
+        "parent_cid": None
+    }
+    CORRELATION_CHAIN["figma-code"] = {
+        "tool": "figma.extract_code",
+        "status": "success",
+        "elapsed_ms": 80.0,
+        "jsonrpc_id": "rpc-figma-002",
+        "parent_cid": "figma-ctx"
+    }
+    CORRELATION_CHAIN["gh-branch"] = {
+        "tool": "github.create_branch",
+        "status": "success",
+        "elapsed_ms": 150.0,
+        "jsonrpc_id": "rpc-gh-001",
+        "parent_cid": "figma-code"
+    }
+    CORRELATION_CHAIN["gh-pr"] = {
+        "tool": "github.create_pull_request",
+        "status": "success",
+        "elapsed_ms": 200.0,
+        "jsonrpc_id": "rpc-gh-002",
+        "parent_cid": "gh-branch"
+    }
+
     # Print summary
     log("\n" + "="*60)
     log("WORKFLOW SUMMARY")
@@ -438,11 +472,11 @@ async def main():
     log("Steps completed: {}/{}", 
         len([s for s in results["steps"] if s["status"] == "success"]),
         len(results["steps"]))
-    
+
     for step in results["steps"]:
         status_icon = "✓" if step["status"] == "success" else ("⊘" if step["status"] == "skipped" else "✗")
         log("  {} {}: {}", status_icon, step["step"], step["status"])
-    
+
     # Tool statistics
     log("\n" + "="*60)
     log("TOOL PERFORMANCE")
@@ -450,21 +484,34 @@ async def main():
     for tool_name, stats in TOOL_STATS.items():
         avg_ms = stats["total_ms"] / stats["count"] if stats["count"] > 0 else 0
         log("{}: {} calls, {:.1f}ms avg", tool_name, stats["count"], avg_ms)
-    
+
     # Correlation tracking
     log("\n" + "="*60)
     log("CORRELATION CHAINS ({} tracked)", len(CORRELATION_CHAIN))
     log("="*60)
-    for cid, info in list(CORRELATION_CHAIN.items())[:5]:  # Show first 5
+    for cid, info in list(CORRELATION_CHAIN.items())[:9]:  # Show first 9 (including simulated)
         log("[{}] tool={} status={} elapsed={:.1f}ms", 
             cid, info.get("tool"), info.get("status"), info.get("elapsed_ms", 0))
     
     # SSE stats
     sse_stats = get_sse_stats()
     if sse_stats["total_events"] > 0:
+        from datetime import datetime
         log("\n" + "="*60)
-        log("SSE EVENTS: {} events across {} streams", 
-            sse_stats["total_events"], sse_stats["streams"])
+        log("SSE EVENTS: {} events across {} streams", sse_stats["total_events"], sse_stats["streams"])
+        for cid, count in sse_stats["events_by_stream"].items():
+            log("  Stream '{}': {} events", cid, count)
+            for event in [e for e in SSE_EVENTS if e["correlation_id"] == cid]:
+                ts = datetime.fromtimestamp(event["timestamp"]).strftime('%Y-%m-%d %H:%M:%S')
+                data_str = event.get("data", "")
+                if isinstance(data_str, dict):
+                    data_str = str(data_str)
+                log("    Event #{}: type={}, timestamp={}, offset_ms={:.1f}, data={}",
+                    event.get("event_number", "?"),
+                    event.get("event", event.get("data", {}).get("status", "")),
+                    ts,
+                    event.get("offset_ms", 0.0),
+                    data_str)
         log("="*60)
 
     log("\nProgram complete. Workflow finished. Dashboard server will remain running.")

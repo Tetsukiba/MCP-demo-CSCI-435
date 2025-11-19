@@ -64,6 +64,7 @@ def instrument(tool_name: str):
     def deco(func: Callable[..., Coroutine[Any, Any, Any]]):
         @wraps(func)
         async def wrapper(*args, **kwargs):
+            print(f"INSTRUMENTED CALL: {tool_name}")  # DEBUG: Confirm decorator is triggered
             cid = str(uuid.uuid4())[:8]
             start = time.time()
             
