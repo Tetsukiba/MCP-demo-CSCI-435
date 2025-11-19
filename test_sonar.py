@@ -50,7 +50,7 @@ async def main():
     
     # Step 4: Check quality gate
     log("\n[STEP 4] Checking quality gate...")
-    gate_result = await quality_gate(project_key="demo-project")
+    gate_result = await quality_gate(project_key="Tetsukiba_MCP-demo-CSCI-435")
     log("Quality gate: {}", gate_result)
     
     # Step 5: Show aggregated stats

@@ -101,15 +101,32 @@ python test_sonar.py
 ## Usage (MCP Server Prompt)
 # NOTE: Users on the Figma Starter plan or with View or Collab seats on paid plans will be limited to up to 6 tool calls per month.
 ```txt
-"Use MCP server tools to:
 
-Fetch the Figma design for node 9-1637 (OR ANOTHER NODE ID) in file kn0QYBr8YvZp0jX4OgsL9U (OR ANOTHER FILE_KEY).
-Extract code files from the design.
-Run SonarQube analysis on the code files for project Tetsukiba_MCP-demo-CSCI-435 (OR ANOTHER PROJECT_KEY).
-Apply any suggested patches.
-Check the SonarQube quality gate.
-Create a new branch and pull request in GitHub repo Tetsukiba/MCP-demo-CSCI-435 (OR ANOTHER REPO).
-Return a summary of each step and the PR URL."
+Do NOT use workflow.py.
+
+As the agent, personally invoke each MCP server tool step-by-step, printing results after each step. For SonarQube analysis, you MUST use the SonarQube MCP server tool (not local scripts or direct terminal commands).
+
+**IMPORTANT:** After extracting code from Figma, you MUST create the extracted code file(s) in the repo (e.g., `figma_extracted/Home.jsx`) before running SonarQube analysis. Do NOT skip this step or attempt to fetch the file from GitHub. The SonarQube MCP server tool must analyze the actual file you created locally.
+
+**Step-by-step workflow:**
+1. Use the Figma MCP server tool to fetch the design for node 9-2708 (or another node ID) in file kn0QYBr8YvZp0jX4OgsL9U (or another file key). Print the result.
+2. Use the Figma MCP server tool to extract code files from the design. Print the result.
+3. **Create the extracted code file(s) in the repo (e.g., `figma_extracted/Home.jsx`).**
+4. **When running SonarQube analysis, use the MCP server tool with the following parameters:**
+  - `project_key`: your project key
+  - `files`: an object mapping filenames to their contents, e.g. `{ "Home.jsx": "<file contents>" }`
+  Print the scan result and the returned taskId.
+5. **After creating the extracted file(s), commit them to the new branch before creating a pull request.**
+6. Use the SonarQube MCP server tool to poll status with the taskId and print the full scan result (including issues, metrics, etc.).
+7. Use the SonarQube MCP server tool to apply any suggested patches. Print the patch result.
+8. Use the SonarQube MCP server tool to check the quality gate. Print the quality gate result.
+9. Use the GitHub MCP server tool to create a new branch, commit the extracted file(s) to it, and then create a pull request in the repo Tetsukiba/MCP-demo-CSCI-435 (or another repo). Print the PR URL.
+10. At the end, print a summary of all steps, including the full SonarQube scan result and PR URL.
+
+**Notes:**
+- Always check the required input format for each MCP server tool.
+- Always commit new or changed files to the branch before creating a PR.
+Do not use orchestrator scripts. Advance automatically through each step, confirming completion before proceeding.
 ```
 ## Troubleshooting
 

@@ -280,17 +280,16 @@ async def _simulate_reanalysis(task_id: str):
 @mcp.tool()
 async def quality_gate(project_key: str) -> dict:
     """
-    Check (simulate) quality gate status for the project. For real SonarQube you'd call the quality gate API:
-    GET /api/qualitygates/project_status?projectKey={project_key}
+    Check quality gate status for the project using the real SonarQube API.
+    Fails loudly if the API is unreachable or returns an error.
     """
-    # Try real API if available
-    try:
-        async with httpx.AsyncClient(auth=AUTH, timeout=20.0) as client:
-            r = await client.get(f"{SONAR_BASE}/api/qualitygates/project_status", params={"projectKey": project_key})
-            if r.status_code == 200:
-                return {"qualityGate": r.json()}
-    except Exception as e:
-        log("sonar.quality_gate real API error: {}", repr(e))
-    # fallback simulated gate: return unknown status since we don't have direct cache access
-    # In a real implementation, you would need to track tasks differently
-    return {"projectKey": project_key, "status": "UNKNOWN"}
+    async with httpx.AsyncClient(auth=AUTH, timeout=20.0) as client:
+        r = await client.get(f"{SONAR_BASE}/api/qualitygates/project_status", params={"projectKey": project_key})
+        if r.status_code == 200:
+            return {"qualityGate": r.json()}
+        else:
+            raise RuntimeError(f"SonarQube quality gate API error: HTTP {r.status_code} - {r.text}")
+
+if __name__ == "__main__":
+    print("Starting MCP server...")
+    mcp.run()
