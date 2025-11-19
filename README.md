@@ -35,7 +35,6 @@ source ~/.bashrc
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-sudo apt-get install sonar-scanner
 cp .env.example .env
 # Edit .env with your tokens
 
