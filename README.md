@@ -99,23 +99,17 @@ python test_sonar.py
 ```
 
 ## Usage (MCP Server Prompt)
+# NOTE: Users on the Figma Starter plan or with View or Collab seats on paid plans will be limited to up to 6 tool calls per month.
 ```txt
-Run an end-to-end workflow:
+"Use MCP server tools to:
 
-Fetch a Figma design from a given Figma URL.
+Fetch the Figma design for node 9-1637 (OR ANOTHER NODE ID) in file kn0QYBr8YvZp0jX4OgsL9U (OR ANOTHER FILE_KEY).
 Extract code files from the design.
-Run SonarQube analysis on the extracted files.
-Apply any suggested patches for detected issues.
+Run SonarQube analysis on the code files for project Tetsukiba_MCP-demo-CSCI-435 (OR ANOTHER PROJECT_KEY).
+Apply any suggested patches.
 Check the SonarQube quality gate.
-Create a new branch in the specified GitHub repository, push the files, and open a pull request.
-
-Inputs:
-Figma URL: [your Figma URL here]
-GitHub repository: [owner/repo]
-SonarQube project key: [project key]
-
-Output:
-Summary of each step, including PR URL if successful.
+Create a new branch and pull request in GitHub repo Tetsukiba/MCP-demo-CSCI-435 (OR ANOTHER REPO).
+Return a summary of each step and the PR URL."
 ```
 ## Troubleshooting
 
