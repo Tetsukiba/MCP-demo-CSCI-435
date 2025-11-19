@@ -1,0 +1,11 @@
+{
+	"servers": {
+		"sonar": {
+			"type": "stdio",
+			"command": "~/mcp-demo/MCP-demo-CSCI-435/.venv/bin/python",
+			"args": [
+				"~/mcp-demo/MCP-demo-CSCI-435/sonar.py"
+			]
+		}
+	}
+}

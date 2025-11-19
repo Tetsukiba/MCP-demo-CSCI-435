@@ -1,0 +1,4 @@
+mcp[cli]
+httpx>=0.24
+python-dotenv
+uvloop
