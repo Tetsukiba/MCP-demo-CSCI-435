@@ -16,6 +16,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import threading
+from dashboard import run_dashboard
+
 # Import our Sonar tools
 from sonar import scan, status, apply_patch, quality_gate
 from mcp_helpers import log, TOOL_STATS, CORRELATION_CHAIN
@@ -464,8 +467,19 @@ async def main():
             sse_stats["total_events"], sse_stats["streams"])
         log("="*60)
 
-    log("\nProgram complete. Exiting.")
+    log("\nProgram complete. Workflow finished. Dashboard server will remain running.")
+    # Block main thread to keep dashboard server alive
+    import time
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        log("\nReceived KeyboardInterrupt. Exiting.")
+        sys.exit(0)
 
+def start_dashboard():
+    threading.Thread(target=run_dashboard, args=(8080,), daemon=True).start()
 
 if __name__ == "__main__":
+    start_dashboard()
     asyncio.run(main())
