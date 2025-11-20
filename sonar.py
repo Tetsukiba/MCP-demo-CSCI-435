@@ -142,8 +142,7 @@ async def _fetch_issues(project_key: str, chunk_size: int = 100) -> list[dict]:
 
 @instrument("sonar.scan")
 @mcp.tool()
-async def scan(project_key: str, files: dict[str, str], **kwargs) -> dict:
-    print("SCAN FUNCTION CALLED") # DEBUG
+async def scan(project_key: str, files: dict[str, str]) -> dict:
     """
     Submit files for real SonarQube analysis using sonar-scanner.
     Creates temp directory, writes files, runs scanner, returns task ID.
@@ -213,7 +212,7 @@ async def _simulate_analysis(task_id: str):
 
 @instrument("sonar.status")
 @mcp.tool()
-async def status(task_id: str, **kwargs) -> dict:
+async def status(task_id: str) -> dict:
     """Poll task status - supports both real and simulated tasks."""
     rec = cache_get(f"sonar_task:{task_id}")
     if not rec:
@@ -249,7 +248,7 @@ async def status(task_id: str, **kwargs) -> dict:
 
 @instrument("sonar.apply_patch")
 @mcp.tool()
-async def apply_patch(task_id: str, patch_id: str, **kwargs) -> dict:
+async def apply_patch(task_id: str, patch_id: str) -> dict:
     """
     Apply a suggested patch from the issues to the file set stored in the task.
     Real world: you'd apply patch and resubmit analysis; here we mutate cached files then mark a 'reanalysis' run.
@@ -279,7 +278,7 @@ async def _simulate_reanalysis(task_id: str):
 
 @instrument("sonar.quality_gate")
 @mcp.tool()
-async def quality_gate(project_key: str, **kwargs) -> dict:
+async def quality_gate(project_key: str) -> dict:
     """
     Check quality gate status for the project using the real SonarQube API.
     Fails loudly if the API is unreachable or returns an error.

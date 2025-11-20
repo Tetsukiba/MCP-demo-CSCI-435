@@ -111,7 +111,7 @@ As the agent, personally invoke each MCP server tool step-by-step, printing resu
 **IMPORTANT:** Do NOT use any local git or bash commands for branch, commit, or PR operations. Only use the GitHub MCP server tools for all repository actions (branch creation, file commits, pull requests, etc.). If you use any local commands, you must stop and switch to the MCP server tools.
 
 **Step-by-step workflow:**
-1. Use the Figma MCP server tool to fetch the design for node 9-2708 (or another node ID) in file             kn0QYBr8YvZp0jX4OgsL9U (or another file key).
+1. Use the Figma MCP server tool to fetch the design for https://www.figma.com/design/kn0QYBr8YvZp0jX4OgsL9U/Demo?node-id=9-2708&p=f&m=dev
 Print: Step name, cid, jsonrpc_id, parent ID, tool name, elapsed time in ms, status (✓/⊘/✗), and all returned data.
 2. Use the Figma MCP server tool to extract code files from the design. 
 Print: Step name,  cid, jsonrpc_id, parent ID, tool name, elapsed time in ms, status, and all returned data.
